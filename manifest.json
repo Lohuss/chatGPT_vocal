@@ -1,0 +1,13 @@
+{
+  "manifest_version": 3,
+  "name": "ChatGPT Vocal",
+  "version": "1.0.0",
+  "description": "Un bouton flottant pour la lecture native de ChatGPT après utilisation de la dictée.",
+  "permissions": ["storage"],
+  "content_scripts": [{
+    "matches": ["https://chatgpt.com/*"],
+    "js": ["state.js", "content.js"],
+    "css": ["styles.css"],
+    "run_at": "document_idle"
+  }]
+}

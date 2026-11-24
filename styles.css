@@ -1,0 +1,24 @@
+#chatgpt-vocal-button {
+  all: initial;
+  position: fixed;
+  z-index: 2147483646;
+  box-sizing: border-box;
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  border: 1px solid #ffffff40;
+  border-radius: 50%;
+  background: #666b73;
+  color: #fff;
+  box-shadow: 0 3px 14px #0005;
+  font: 24px/1 system-ui, sans-serif;
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+}
+#chatgpt-vocal-button[hidden] { display: none !important; }
+#chatgpt-vocal-button[data-state="ready"] { background: #087f67; cursor: pointer; }
+#chatgpt-vocal-button[data-state="playing"] { background: #ac3b44; cursor: pointer; }
+#chatgpt-vocal-button[data-dragging="true"] { cursor: grabbing; }
+#chatgpt-vocal-button:focus-visible { outline: 3px solid #74baff; outline-offset: 3px; }

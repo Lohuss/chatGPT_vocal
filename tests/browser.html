@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="fr">
+<meta charset="utf-8">
+<title>ChatGPT Vocal — tests d’intégration locaux</title>
+<link rel="stylesheet" href="/styles.css">
+<style>
+body { font: 16px system-ui; margin: 24px; background: #f8f9fb; color: #20252b; }
+[data-app-shell-main-content-layout] { padding: 20px; background: white; border: 1px solid #ccc; }
+[data-rail-chat-transcript] { min-height: 20px; }
+button { padding: 6px 12px; margin: 4px; }
+.pass { color: #087a39; } .fail { color: #bd1730; }
+</style>
+<h1>Tests d’intégration — ChatGPT Vocal</h1>
+<p>Interface native simulée avec les attributs vérifiés dans Chrome. Aucun accès réseau externe ni microphone.</p>
+<button class="sidebar-item" id="new-chat">New chat</button>
+<div data-app-shell-main-content-layout="thread-edge-scroll">
+  <div data-rail-chat-transcript data-chatgpt-conversation-selection-target="one"></div>
+  <div contenteditable="true" data-composer-markdown role="textbox" aria-label="Saisie de test"></div>
+  <button data-dictation-button="idle">Dictate</button>
+  <button data-composer-voice-start="true">Start Voice</button>
+  <button aria-label="Send">Send</button>
+</div>
+<input id="input" aria-label="Champ à préserver">
+<a href="#test" id="link">Contrôle à préserver</a>
+<ol id="results"></ol>
+<p id="summary">Tests en cours…</p>
+<script src="/tests/setup.js"></script>
+<script src="/state.js"></script>
+<script src="/content.js"></script>
+<script src="/tests/browser.js"></script>
+</html>

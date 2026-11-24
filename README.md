@@ -1,15 +1,15 @@
 # ChatGPT Vocal
 
-Extension Chrome Manifest V3 pour déclencher la **lecture native** de la dernière réponse ChatGPT depuis un bouton flottant, après utilisation de la dictée native. JavaScript et CSS natifs, sans compilation ni dépendance.
+Extension Chrome / Brave (ordinateur) Manifest V3 pour déclencher la **lecture native** de la dernière réponse ChatGPT depuis un bouton flottant, après utilisation de la dictée native. JavaScript et CSS natifs, sans compilation ni dépendance.
 
 ## Installation locale
 
-1. Ouvrir `chrome://extensions` dans Chrome.
+1. Ouvrir `chrome://extensions` dans Chrome, ou `brave://extensions` dans Brave.
 2. Activer **Mode développeur**.
 3. Choisir **Charger l’extension non empaquetée** et sélectionner `/opt/chatGPT_vocal` (le dossier contenant `manifest.json`).
 4. Recharger les onglets `https://chatgpt.com` déjà ouverts.
 
-Après une modification du code, recharger l’extension dans `chrome://extensions`, puis recharger ChatGPT. Aucune installation automatique dans le profil Chrome n’est effectuée par ce dépôt.
+Après une modification du code, recharger l’extension dans la page des extensions du navigateur, puis recharger ChatGPT. Pour cette correction, vérifier que la version affichée est **1.0.1**. Aucune installation automatique dans le profil Chrome n’est effectuée par ce dépôt.
 
 ## Utilisation
 
@@ -22,6 +22,14 @@ Après une modification du code, recharger l’extension dans `chrome://extensio
 - Changer de conversation masque le bouton et efface son activation. Le premier envoi depuis une nouvelle conversation conserve l’activation lorsque son identifiant apparaît dans l’URL.
 
 L’activation n’est pas restaurée après un rechargement de page. Seule la position est persistée.
+
+### Brave et interface française
+
+La version 1.0.1 détecte l’appui sur la dictée avant que ChatGPT ne modifie son état, ainsi que son activation au clavier et ses transitions natives depuis `idle`. L’apparition du bouton ne dépend plus de la présence du conteneur particulier de la première interface testée. Les actions françaises et anglaises sont prises en charge ; l’arrêt de lecture suit aussi le contrôle natif déjà identifié, sans dépendre de la traduction de son libellé d’arrêt.
+
+Les extraits fournis depuis Brave confirment `data-dictation-button="idle"` avec `aria-label="Dicter"` et le bouton `aria-label="Envoyer"`. Le serveur de développement ne possède pas Brave : les tests automatisés de l’interface française s’exécutent dans Chrome sur un DOM simulé. La validation directe dans Brave reste à faire après rechargement.
+
+Si le bouton reste absent : vérifier la version 1.0.1, que l’extension est activée et autorisée sur `https://chatgpt.com`, puis recharger l’onglet et démarrer une nouvelle dictée. En cas d’erreur, consulter **Erreurs** dans la fiche de l’extension sur `brave://extensions`. La dictée et la lecture natives doivent être disponibles dans ChatGPT ; l’extension n’accorde pas de permission microphone supplémentaire.
 
 ## Architecture
 
@@ -53,19 +61,19 @@ Les sélecteurs sont centralisés dans `SELECTORS` au début de `content.js`. Il
 
 | Élément observé | Attributs utilisés |
 | --- | --- |
-| Dictée inactive | `button[data-dictation-button="idle"]` |
+| Dictée inactive | `button[data-dictation-button="idle"]`, `button[data-start-dictation]` |
 | Conversation vocale exclue | `button[data-composer-voice-start="true"]` |
-| Conteneur principal | `[data-app-shell-main-content-layout]` |
+| Conteneur principal | `[data-app-shell-main-content-layout]`, `[data-testid="ds-document-layout"]`, `main` |
 | Transcript courant | `[data-chatgpt-conversation-selection-target][data-rail-chat-transcript]` |
 | Tour | `[data-turn-key]` |
 | Rôle assistant | `[data-conversation-role="assistant"]` |
 | État terminé | `[data-talvt-turn-state="complete"]`, combiné à la présence du contrôle de lecture |
-| Envoi / génération | `button[aria-label="Send"]` / `button[aria-label="Stop"]` |
-| Lecture / arrêt | `button[aria-label="Read aloud"][aria-pressed="false"]` / `button[aria-label="Stop reading aloud"][aria-pressed="true"]` |
-| Nouvelle conversation | `button.sidebar-item` dont le texte est `New chat` |
+| Envoi / génération | Libellés exacts `Send` / `Envoyer` ; `Stop` / `Arrêter` / `Arrêter la génération` |
+| Lecture / arrêt | `Read aloud` / `Lire à voix haute` avec `aria-pressed="false"` ; suivi du même bouton lorsque `aria-pressed="true"`, ou arrêt anglais explicitement reconnu |
+| Nouvelle conversation | `button.sidebar-item` dont le texte est `New chat` ou `Nouvelle conversation` |
 | Compositeur | `[contenteditable="true"][data-composer-markdown]` |
 
-Les libellés vérifiés étaient **en anglais**. Les autres langues et anciennes variantes de l’interface ne sont pas couvertes par des sélecteurs supposés. Si les attributs changent, inspecter les éléments réels dans les outils développeur, modifier cette table de sélecteurs, puis rejouer les tests. En l’absence d’un état ou d’un contrôle reconnu, la lecture reste indisponible.
+L’inspection initiale concernait les libellés anglais. Le 25 novembre, les boutons français Dicter et Envoyer ont été confirmés par les extraits DOM fournis depuis Brave. Les alias français de lecture et de génération sont testés dans la fixture locale, sans prétendre à une inspection de ces contrôles dans Brave. Les autres langues ne sont pas couvertes. Si les attributs changent, inspecter les éléments réels dans les outils développeur, modifier cette table de sélecteurs, puis rejouer les tests. En l’absence d’un état ou d’un contrôle reconnu, la lecture reste indisponible.
 
 La capture de la dictée correspond à l’activation du bouton natif, même si l’utilisateur annule ensuite l’enregistrement. Le bouton reste alors gris jusqu’à un nouvel envoi. Les envois suivis sont le bouton natif **Send** et **Entrée** dans le compositeur (sans modificateur). Les mécanismes d’envoi externes au compositeur ne sont pas pris en charge. Une réponse démontée par la virtualisation n’est pas lue tant que ChatGPT ne remet pas son contrôle natif dans le DOM : aucune tentative de lecture d’une réponse plus ancienne n’est faite.
 
@@ -81,6 +89,6 @@ node --test tests/state.test.cjs
 python3 -m http.server 18765 --bind 127.0.0.1
 ```
 
-Ouvrir ensuite `http://127.0.0.1:18765/tests/browser.html`. Cette page exécute le vrai `content.js` sur un DOM simulant les attributs observés, avec stockage et contrôles audio simulés. Elle ne contacte pas ChatGPT et n’accède pas au microphone. Le serveur local sert uniquement au développement et peut être arrêté après les tests.
+Ouvrir ensuite `http://127.0.0.1:18765/tests/browser.html`. Utiliser également `http://127.0.0.1:18765/tests/browser.html?lang=fr` pour la variante française et le conteneur `main`. Cette page exécute le vrai `content.js` sur un DOM simulant les attributs observés, avec stockage et contrôles audio simulés. Elle ne contacte pas ChatGPT et n’accède pas au microphone. Le serveur local sert uniquement au développement et peut être arrêté après les tests.
 
 Les événements Pointer Events synthétiques des tests ne peuvent pas établir une capture native du pointeur : seule cette capture est simulée. Le cycle complet d’une vraie dictée et l’extension effectivement chargée dans le profil Chrome doivent encore être vérifiés manuellement après installation. Le plan de recette complet reste dans `specs.md` ; ses cases ne sont pas cochées pour des validations uniquement simulées.

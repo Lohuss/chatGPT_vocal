@@ -3,21 +3,22 @@
   if (globalThis.__chatgptVocalLoaded) return;
   globalThis.__chatgptVocalLoaded = true;
 
-  // Verified on the authenticated ChatGPT interface, 2026-11-24.
+  // Authenticated DOM inspected 2026-11-24; French microphone/send supplied 2026-11-25.
   // Keep interface-specific selectors here. Unknown layouts fail closed.
   const SELECTORS = Object.freeze({
-    layout: "[data-app-shell-main-content-layout]",
+    layout: '[data-app-shell-main-content-layout], [data-testid="ds-document-layout"], main',
     transcript: "[data-chatgpt-conversation-selection-target][data-rail-chat-transcript]",
     turn: "[data-turn-key]",
     assistant: '[data-conversation-role="assistant"]',
     complete: '[data-talvt-turn-state="complete"]',
-    dictate: 'button[data-dictation-button="idle"]',
+    dictate: 'button[data-dictation-button="idle"], button[data-start-dictation]',
+    dictationState: "button[data-dictation-button]",
     voice: 'button[data-composer-voice-start="true"]',
     newChat: "button.sidebar-item",
     composer: '[contenteditable="true"][data-composer-markdown]',
-    send: 'button[aria-label="Send"]',
-    generating: 'button[aria-label="Stop"]',
-    read: 'button[aria-label="Read aloud"][aria-pressed="false"]',
+    send: 'button[aria-label="Send"], button[aria-label="Envoyer"]',
+    generating: 'button[aria-label="Stop"], button[aria-label="Arrêter"], button[aria-label="Arrêter la génération"]',
+    read: 'button[aria-label="Read aloud"][aria-pressed="false"], button[aria-label="Lire à voix haute"][aria-pressed="false"]',
     stopReading: 'button[aria-label="Stop reading aloud"][aria-pressed="true"]',
   });
   const INTERACTIVE = 'input, textarea, select, button, a, summary, label, audio, video, iframe, [contenteditable]:not([contenteditable="false"]), [tabindex]:not([tabindex="-1"]), [role="button"], [role="textbox"], [role="combobox"], [role="checkbox"], [role="radio"], [role="slider"], [role="switch"], [role="menuitem"], [role="tab"]';
@@ -34,6 +35,8 @@
   let position = null;
   let positionChanged = false;
   let currentControl = null;
+  let dictationPress = null;
+  let knownReadControl = null;
   const SIZE = 48;
   const MARGIN = 8;
   const STORAGE_KEY = "floatingPosition";
@@ -57,13 +60,19 @@
     );
     const turns = transcript?.querySelectorAll(SELECTORS.turn);
     const turn = turns?.[turns.length - 1];
-    const control = turn?.querySelector(`${SELECTORS.stopReading}, ${SELECTORS.read}`) ?? null;
+    const readyControl = turn?.querySelector(SELECTORS.read) ?? null;
+    if (readyControl) knownReadControl = readyControl;
+    // Follow the already identified native toggle, independently of the
+    // translated stop label. Never substitute an arbitrary pressed button.
+    const playingControl = knownReadControl && turn?.contains(knownReadControl) &&
+      knownReadControl.getAttribute("aria-pressed") === "true" ? knownReadControl : null;
+    const control = playingControl ?? turn?.querySelector(SELECTORS.stopReading) ?? readyControl;
     return {
       key: turn?.getAttribute("data-turn-key") ?? null,
       generating: Boolean(findVisible(SELECTORS.generating)),
       complete: Boolean(turn?.querySelector(SELECTORS.assistant) && turn?.querySelector(SELECTORS.complete)),
       readable: enabled(control),
-      playing: Boolean(control?.matches(SELECTORS.stopReading)),
+      playing: control?.getAttribute("aria-pressed") === "true",
       control,
     };
   }
@@ -105,6 +114,15 @@
   }
 
   const observer = new MutationObserver(records => {
+    // Native handlers can leave idle before click reaches the document.
+    // Observe the known state transition even while our UI is inactive.
+    for (const record of records) {
+      if (record.type === "attributes" && record.attributeName === "data-dictation-button" &&
+          record.oldValue === "idle" && record.target.matches(SELECTORS.dictationState) &&
+          record.target.getAttribute("data-dictation-button") !== "idle") {
+        beginDictation(record.target, true);
+      }
+    }
     if (!session.active) return;
     // Ignore our own UI, text streaming and unrelated style/class changes.
     if (records.some(record => record.target !== button && !button.contains(record.target))) schedule();
@@ -131,6 +149,7 @@
       childList: true,
       subtree: true,
       attributes: true,
+      attributeOldValue: true,
       attributeFilter: ["aria-label", "aria-pressed", "disabled", "aria-disabled", "data-talvt-turn-state", "data-dictation-button", "data-chatgpt-conversation-selection-target"],
     });
   }
@@ -151,6 +170,27 @@
     schedule();
   }
 
+  function beginDictation(target, nativeTransition = false) {
+    const nativeButton = target?.closest(nativeTransition ? SELECTORS.dictationState : SELECTORS.dictate);
+    if (!nativeButton || !visible(nativeButton) || nativeButton.matches(SELECTORS.voice) ||
+        (!nativeTransition && !enabled(nativeButton))) return false;
+    session.navigate(location.pathname);
+    bindLayout();
+    session.dictate(snapshot().key);
+    render(session.state);
+    schedule();
+    return true;
+  }
+
+  // Capture before ChatGPT handles pointerdown and changes the native state.
+  // Do not preventDefault: Brave/ChatGPT keep their native microphone behavior.
+  document.addEventListener("pointerdown", event => {
+    dictationPress = null;
+    if (event.button !== 0 || !event.isPrimary || !(event.target instanceof Element)) return;
+    const nativeButton = event.target.closest(SELECTORS.dictate);
+    if (beginDictation(nativeButton)) dictationPress = nativeButton;
+  }, true);
+
   document.addEventListener("click", event => {
     const target = event.target instanceof Element ? event.target : event.target?.parentElement;
     if (!target || button.contains(target)) return;
@@ -165,18 +205,19 @@
       return;
     }
     const newChat = target.closest(SELECTORS.newChat);
-    if (newChat?.textContent.trim() === "New chat") {
+    if (["New chat", "Nouvelle conversation"].includes(newChat?.textContent.trim())) {
       session.reset();
       render(session.state);
       schedule();
       return;
     }
+    const pressedButton = dictationPress;
+    dictationPress = null;
+    if (pressedButton?.contains(target)) return;
+    // Activation must not depend on a particular ChatGPT layout existing.
+    if (beginDictation(target)) return;
     if (!layout?.contains(target)) return;
-    const dictation = target.closest(SELECTORS.dictate);
-    if (dictation && enabled(dictation) && visible(dictation) && !target.closest(SELECTORS.voice)) {
-      session.dictate(snapshot().key);
-      render(session.state);
-    } else if (target.closest(SELECTORS.send) && enabled(target.closest(SELECTORS.send))) {
+    if (target.closest(SELECTORS.send) && enabled(target.closest(SELECTORS.send))) {
       markSubmit();
     }
     schedule();
@@ -185,6 +226,11 @@
   document.addEventListener("keydown", event => {
     if (event.defaultPrevented || event.isComposing) return;
     const path = event.composedPath();
+    if (!event.repeat && !event.ctrlKey && !event.metaKey && !event.altKey &&
+        (event.key === "Enter" || event.code === "Space")) {
+      const target = path.find(node => node instanceof Element);
+      if (target && beginDictation(target)) return;
+    }
     const inComposer = path.some(node => node instanceof Element && node.matches(SELECTORS.composer));
     if (event.key === "Enter" && !event.shiftKey && !event.ctrlKey && !event.altKey && !event.metaKey && inComposer) {
       markSubmit();
